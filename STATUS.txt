@@ -1,0 +1,1 @@
+idle pick_up_object
