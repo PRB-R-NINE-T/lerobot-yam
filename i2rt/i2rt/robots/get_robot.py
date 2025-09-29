@@ -23,7 +23,7 @@ def get_encoder_chain(can_interface: CanInterface) -> EncoderChain:
 def get_yam_robot(
     channel: str = "can0",
     gripper_type: GripperType = GripperType.CRANK_4310,
-    zero_gravity_mode:bool = True,
+    zero_gravity_mode:bool = False,
 ) -> MotorChainRobot:
     with_gripper = True
     with_teaching_handle = False
@@ -127,6 +127,7 @@ def get_yam_robot(
             enable_gripper_calibration=gripper_type.get_gripper_needs_calibration(),
             gripper_type=gripper_type,
             limit_gripper_force=50.0,
+            use_gravity_comp=False,
         )
     else:
         return get_robot()

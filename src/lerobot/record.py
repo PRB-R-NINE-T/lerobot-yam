@@ -130,7 +130,7 @@ class DatasetRecordConfig:
     # Number of seconds for data recording for each episode.
     episode_time_s: int | float = 60
     # Number of seconds for resetting the environment after each episode.
-    reset_time_s: int | float = 60
+    reset_time_s: int | float = 20
     # Number of episodes to record.
     num_episodes: int = 50
     # Encode frames in the dataset into video
@@ -149,7 +149,7 @@ class DatasetRecordConfig:
     # Number of threads writing the frames as png images on disk, per camera.
     # Too many threads might cause unstable teleoperation fps due to main thread being blocked.
     # Not enough threads might cause low camera fps.
-    num_image_writer_threads_per_camera: int = 4
+    num_image_writer_threads_per_camera: int = 3
     # Number of episodes to record before batch encoding videos
     # Set to 1 for immediate encoding (default behavior), or higher for batched encoding
     video_encoding_batch_size: int = 1
@@ -361,6 +361,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             if not events["stop_recording"] and (
                 (recorded_episodes < cfg.dataset.num_episodes - 1) or events["rerecord_episode"]
             ):
+                print(cfg.dataset.reset_time_s)
                 log_say("Reset the environment", cfg.play_sounds)
                 record_loop(
                     robot=robot,
@@ -379,7 +380,9 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 dataset.clear_episode_buffer()
                 continue
 
+            print("saving episode")
             dataset.save_episode()
+            print("saved episode")
             recorded_episodes += 1
 
     log_say("Stop recording", cfg.play_sounds, blocking=True)

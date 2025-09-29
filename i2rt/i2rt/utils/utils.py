@@ -34,7 +34,7 @@ class RateRecorder:
         assert self.last_report_time is not None, "RateRecorder must be started before reporting."
         elapsed_time = time.time() - self.last_report_time
         rate = self.iteration_count / elapsed_time if elapsed_time > 0 else 0
-        logging.info(f"{self.name} Total rate: {rate:.2f} iterations per second over {elapsed_time:.2f} seconds.")
+        logging.debug(f"{self.name} Total rate: {rate:.2f} iterations per second over {elapsed_time:.2f} seconds.")
         return rate
 
     def track(self) -> None:

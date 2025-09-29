@@ -64,7 +64,7 @@ class MotorChainRobot(Robot):
         self,
         motor_chain: MotorChain,
         xml_path: Optional[str] = None,
-        use_gravity_comp: bool = True,
+        use_gravity_comp: bool = False,
         gravity: Optional[np.ndarray] = None,
         gravity_comp_factor: float = 1.0,  # New parameter with default value
         gripper_index: Optional[int] = None,  # Zero starting index: if you have a 6 dof arm and last one is gripper: 6
@@ -165,13 +165,17 @@ class MotorChainRobot(Robot):
         )
 
         self._joint_limits:Optional[np.ndarray] = None
+        print(f"use_gravity_comp: {use_gravity_comp}", f"xml_path: {xml_path}")
+        print(f"joint_limits: {joint_limits}")
+        # return
         if xml_path is not None:
-            self.xml_path = os.path.expanduser(xml_path)
-            self.kdl = MuJoCoKDL(self.xml_path)
-            if gravity is not None:
-                self.kdl.set_gravity(gravity)
-            # Load the joint limits from the xml file
-            self._joint_limits = self.kdl.joint_limits
+            pass
+            # self.xml_path = os.path.expanduser(xml_path)
+            # self.kdl = MuJoCoKDL(self.xml_path)
+            # if gravity is not None:
+            #     self.kdl.set_gravity(gravity)
+            # # Load the joint limits from the xml file
+            # self._joint_limits = self.kdl.joint_limits
         else:
             assert use_gravity_comp is False, "Gravity compensation requires a valid XML path."
 
@@ -279,9 +283,9 @@ class MotorChainRobot(Robot):
             if elapsed_time >= 10.0:
                 control_frequency = iteration_count / elapsed_time
                 # Overwrite the current line with the new frequency information
-                logging.info(f"{self}: Grav Comp Control Frequency: {control_frequency:.2f} Hz")
+                logging.debug(f"{self}: Grav Comp Control Frequency: {control_frequency:.2f} Hz")
                 if control_frequency < 100:
-                    logging.warning(
+                    logging.debug(
                         f"{self}: Gravity compensation control loop is slow, current frequency: {control_frequency:.2f} Hz"
                     )
                 # Reset the counter and timer

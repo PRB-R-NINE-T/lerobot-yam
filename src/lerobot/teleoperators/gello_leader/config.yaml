@@ -1,5 +1,5 @@
 agent_right:
-  port: /dev/ttyUSB0
+  port: /dev/ttyUSB1
   dynamixel_config:
     _target_: gello.agents.gello_agent.DynamixelRobotConfig
     joint_ids: [1, 2, 3, 4, 5, 6]
@@ -8,7 +8,7 @@ agent_right:
     gripper_config: [7, 176.662109375, 236.162109375]
   start_joints: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
 agent_left:
-  port: /dev/ttyUSB1
+  port: /dev/ttyUSB0
   dynamixel_config:
     _target_: gello.agents.gello_agent.DynamixelRobotConfig
     joint_ids: [1, 2, 3, 4, 5, 6]

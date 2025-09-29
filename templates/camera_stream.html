@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Stream</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .video-container {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        #videoStream {
+            max-width: 100%;
+            height: auto;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+        }
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        label {
+            font-weight: bold;
+            color: #555;
+        }
+        select, button {
+            padding: 8px 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        select {
+            min-width: 150px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            text-align: center;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .camera-info {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .camera-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .camera-card {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            background: white;
+        }
+        .camera-card h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .camera-card p {
+            margin: 5px 0;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📹 Camera Stream</h1>
+        
+        <div class="video-container">
+            <img id="videoStream" src="{{ url_for('video_feed') }}" alt="Camera Stream">
+        </div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="cameraSelect">Select Camera:</label>
+                <select id="cameraSelect">
+                    {% for camera in cameras %}
+                    <option value="{{ camera.id }}">{{ camera.name }} ({{ camera.id }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="control-group">
+                <button id="switchCamera">Switch Camera</button>
+            </div>
+            <div class="control-group">
+                <button id="captureBtn">Capture Image</button>
+            </div>
+        </div>
+        
+        <div id="status"></div>
+        
+        <div class="camera-info">
+            <h3>Available Cameras</h3>
+            <div class="camera-list">
+                {% for camera in cameras %}
+                <div class="camera-card">
+                    <h3>{{ camera.name }}</h3>
+                    <p><strong>ID:</strong> {{ camera.id }}</p>
+                    <p><strong>Resolution:</strong> {{ camera.width }}x{{ camera.height }}</p>
+                    <p><strong>FPS:</strong> {{ "%.1f"|format(camera.fps) }}</p>
+                    <p><strong>Backend:</strong> {{ camera.backend_api }}</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const cameraSelect = document.getElementById('cameraSelect');
+        const switchBtn = document.getElementById('switchCamera');
+        const captureBtn = document.getElementById('captureBtn');
+        const statusDiv = document.getElementById('status');
+        const videoStream = document.getElementById('videoStream');
+
+        function showStatus(message, isError = false) {
+            statusDiv.innerHTML = `<div class="status ${isError ? 'error' : 'success'}">${message}</div>`;
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 3000);
+        }
+
+        switchBtn.addEventListener('click', async () => {
+            const cameraId = cameraSelect.value;
+            switchBtn.disabled = true;
+            switchBtn.textContent = 'Switching...';
+            
+            try {
+                const response = await fetch(`/api/camera/${cameraId}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showStatus(data.message);
+                    // Refresh the video stream
+                    videoStream.src = videoStream.src + '?t=' + new Date().getTime();
+                } else {
+                    showStatus(data.message, true);
+                }
+            } catch (error) {
+                showStatus('Error switching camera: ' + error.message, true);
+            } finally {
+                switchBtn.disabled = false;
+                switchBtn.textContent = 'Switch Camera';
+            }
+        });
+
+        captureBtn.addEventListener('click', async () => {
+            captureBtn.disabled = true;
+            captureBtn.textContent = 'Capturing...';
+            
+            try {
+                const response = await fetch('/api/capture', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showStatus(data.message);
+                    // Show captured image in a new window
+                    if (data.image) {
+                        const newWindow = window.open();
+                        newWindow.document.write(`
+                            <html>
+                                <head><title>Captured Image</title></head>
+                                <body style="margin:0; text-align:center; background:#000;">
+                                    <img src="data:image/jpeg;base64,${data.image}" style="max-width:100%; max-height:100vh;">
+                                </body>
+                            </html>
+                        `);
+                    }
+                } else {
+                    showStatus(data.message, true);
+                }
+            } catch (error) {
+                showStatus('Error capturing image: ' + error.message, true);
+            } finally {
+                captureBtn.disabled = false;
+                captureBtn.textContent = 'Capture Image';
+            }
+        });
+
+        // Auto-refresh camera list every 30 seconds
+        setInterval(async () => {
+            try {
+                const response = await fetch('/api/cameras');
+                const cameras = await response.json();
+                // Update camera select options if needed
+                // This is a simple implementation - you might want to make it more sophisticated
+            } catch (error) {
+                console.log('Failed to refresh camera list:', error);
+            }
+        }, 30000);
+    </script>
+</body>
+</html>
