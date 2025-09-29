@@ -202,6 +202,20 @@ class YamBimanual(Robot):
         self.robot_right.command_joint_pos(right_positions)
         return action
 
+    def get_joint_positions(self) -> list[float]:
+        arr = []
+        left_pos = self.robot_left.get_joint_pos()
+        right_pos = self.robot_right.get_joint_pos()
+        for i in range(len(left_pos)):
+            arr.append(left_pos[i])
+        for i in range(len(right_pos)):
+            arr.append(right_pos[i])
+        return arr
+
+    def command_joint_pos(self, joint_pos: list[float]) -> None:
+        self.robot_left.command_joint_pos(joint_pos[:7])
+        self.robot_right.command_joint_pos(joint_pos[7:])
+
     def disconnect(self):
         if not self.has_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")

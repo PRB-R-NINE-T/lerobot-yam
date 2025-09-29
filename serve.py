@@ -1,122 +1,163 @@
-import dataclasses
-import enum
+import io
 import logging
-import socket
+import threading
+import time
+import os
+from datetime import datetime
+from PIL import Image
+import cv2
+import numpy as np
+import requests
+from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # noqa: F401
+from lerobot.robots import yam_bimanual
+from openpi_client import image_tools
+from openpi_client import websocket_client_policy
+from lerobot.cameras.utils import make_cameras_from_configs
+from lerobot.robots.utils import make_robot_from_config
+from lerobot.robots.yam_bimanual.config_yam_bimanual import YamBimanualConfig
 
-import tyro
+# Configure logging to show timestamps
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-from openpi.policies import policy as _policy
-from openpi.policies import policy_config as _policy_config
-from openpi.serving import websocket_policy_server
-from openpi.training import config as _config
+# Create output directory for images
+output_dir = "outputs/captured_images"
+os.makedirs(output_dir, exist_ok=True)
 
+# Initialize cameras
+# camera_1, camera_4 = initialize_cameras()
+print("Cameras initialized")
+num_steps = 5000
+# Outside of episode loop, initialize the policy client.
+# Point to the host and port of the policy server (localhost and 8000 are the defaults).
+# 38.80.152.248:30982
+client = websocket_client_policy.WebsocketClientPolicy("38.80.152.248", port=31607)
+# Example state and task instruction (you should replace these with actual values)
+state = np.zeros(14)  # Replace with actual robot state
+task_instruction = "fold napkins"  # Replace with actual task instruction
 
-class EnvMode(enum.Enum):
-    """Supported environments."""
+cfg = YamBimanualConfig(
+    port="can_left",
+    port_right="can_right",
+)
 
-    ALOHA = "aloha"
-    ALOHA_SIM = "aloha_sim"
-    DROID = "droid"
-    LIBERO = "libero"
+robot = make_robot_from_config(cfg)
 
+robot.connect()
 
-@dataclasses.dataclass
-class Checkpoint:
-    """Load a policy from a trained checkpoint."""
+cameras = make_cameras_from_configs({
+            "top": OpenCVCameraConfig(
+                index_or_path=8,
+                fps=30,
+                width=640,
+                height=480,
+            ),
+            "left": OpenCVCameraConfig(
+                index_or_path=0,
+                fps=30,
+                width=640,
+                height=480,
+            ),
+            "right": OpenCVCameraConfig(
+                index_or_path=4,
+                fps=30,
+                width=640,
+                height=480,
+            ),
+        })
 
-    # Training config name (e.g., "pi0_aloha_sim").
-    config: str
-    # Checkpoint directory (e.g., "checkpoints/pi0_aloha_sim/exp/10000").
-    dir: str
+for cam in cameras.values():
+    cam.connect()
 
+print(robot.command_joint_pos([0] * 14))
 
-@dataclasses.dataclass
-class Default:
-    """Use the default policy for the given environment."""
+current_level = "TOP"  # Ask user for initial level
+print(f"Starting with level: {current_level}")
 
+item_for_next_two_chunks = None
+skip = 0
+last_json = None
 
-@dataclasses.dataclass
-class Args:
-    """Arguments for the serve_policy script."""
+def main():
+    global skip, last_json, current_level
+    for step in range(num_steps):
+        step_start_time = datetime.now()
+        logging.info(f"Step {step} started at: {step_start_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}")
+        
+        # Fetch current frames from cameras
+        top_cam = cameras["top"].async_read()
+        left_cam = cameras["left"].async_read()
+        right_cam = cameras["right"].async_read()
+        
+        # Save images every 10 steps
+        if step % 10 == 0:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+            
+            # Save original images
+            cv2.imwrite(f"{output_dir}/opencv__dev_video{step}_top.png", top_cam)
+            cv2.imwrite(f"{output_dir}/opencv__dev_video{step}_left.png", left_cam)
+            cv2.imwrite(f"{output_dir}/opencv__dev_video{step}_right.png", right_cam)
+            
+            logging.info(f"Saved images for step {step}")
+                        
+        # Resize images on the client side to minimize bandwidth / latency. Always return images in uint8 format.
+        # We provide utilities for resizing images + uint8 conversion so you match the training routines.
+        # The typical resize_size for pre-trained pi0 models is 224.
+        # Note that the proprioceptive `state` can be passed unnormalized, normalization will be handled on the server side.
+        current_state = robot.get_joint_positions()
+        current_state = np.array(current_state)
 
-    # Environment to serve the policy for. This is only used when serving default policies.
-    env: EnvMode = EnvMode.ALOHA_SIM
+        # Log observation construction time
+        observation_time = datetime.now()
+        logging.info(f"Observation constructed at: {observation_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}")
 
-    # If provided, will be used in case the "prompt" key is not present in the data, or if the model doesn't have a default
-    # prompt.
-    default_prompt: str | None = None
+        observation = {
+            "observation.images.top": image_tools.convert_to_uint8(
+                image_tools.resize_with_pad(top_cam, 224, 224)
+            ),
+            "observation.images.left": image_tools.convert_to_uint8(
+                image_tools.resize_with_pad(left_cam, 224, 224)
+            ),
+            "observation.images.right": image_tools.convert_to_uint8(
+                image_tools.resize_with_pad(right_cam, 224, 224)
+            ),
+            "observation.state": current_state,
+            "prompt": task_instruction,
+        }
 
-    # Port to serve the policy on.
-    port: int = 8000
-    # Record the policy's behavior for debugging.
-    record: bool = False
+        print(current_state, "curr state")
 
-    # Specifies how to load the policy. If not provided, the default policy for the environment will be used.
-    policy: Checkpoint | Default = dataclasses.field(default_factory=Default)
+        # Call the policy server with the current observation.
+        # This returns an action chunk of shape (action_horizon, action_dim).
+        # Note that you typically only need to call the policy every N steps and execute steps
+        # from the predicted action chunk open-loop in the remaining steps.
+        policy_start_time = datetime.now()
+        logging.info(f"Policy inference started at: {policy_start_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}")
+        
+        action_chunk = client.infer(observation)["actions"]
+        
+        policy_end_time = datetime.now()
+        logging.info(f"Policy inference completed at: {policy_end_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}")
+        
+        action_chunk = action_chunk[:30]
+        for action in action_chunk:
+            # if action[1] < 0.03:
+            #     continue
+            robot.command_joint_pos(np.array(action[:14]))
+            time.sleep(0.04)
 
-
-# Default checkpoints that should be used for each environment.
-DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
-    EnvMode.ALOHA: Checkpoint(
-        config="pi05_aloha",
-        dir="gs://openpi-assets-preview/checkpoints/pi05_may21_280k_v1",
-    ),
-    EnvMode.ALOHA_SIM: Checkpoint(
-        config="pi0_aloha_sim",
-        dir="gs://openpi-assets/checkpoints/pi0_aloha_sim",
-    ),
-    EnvMode.DROID: Checkpoint(
-        config="pi0_fast_droid",
-        dir="gs://openpi-assets/checkpoints/pi0_fast_droid",
-    ),
-    EnvMode.LIBERO: Checkpoint(
-        config="pi0_fast_libero",
-        dir="gs://openpi-assets/checkpoints/pi0_fast_libero",
-    ),
-}
-
-
-def create_default_policy(env: EnvMode, *, default_prompt: str | None = None) -> _policy.Policy:
-    """Create a default policy for the given environment."""
-    if checkpoint := DEFAULT_CHECKPOINT.get(env):
-        return _policy_config.create_trained_policy(
-            _config.get_config(checkpoint.config), checkpoint.dir, default_prompt=default_prompt
-        )
-    raise ValueError(f"Unsupported environment mode: {env}")
-
-
-def create_policy(args: Args) -> _policy.Policy:
-    """Create a policy from the given arguments."""
-    match args.policy:
-        case Checkpoint():
-            return _policy_config.create_trained_policy(
-                _config.get_config(args.policy.config), args.policy.dir, default_prompt=args.default_prompt
-            )
-        case Default():
-            return create_default_policy(args.env, default_prompt=args.default_prompt)
-
-
-def main(args: Args) -> None:
-    policy = create_policy(args)
-    policy_metadata = policy.metadata
-
-    # Record the policy's behavior.
-    if args.record:
-        policy = _policy.PolicyRecorder(policy, "policy_records")
-
-    hostname = socket.gethostname()
-    local_ip = socket.gethostbyname(hostname)
-    logging.info("Creating server (host: %s, ip: %s)", hostname, local_ip)
-
-    server = websocket_policy_server.WebsocketPolicyServer(
-        policy=policy,
-        host="0.0.0.0",
-        port=args.port,
-        metadata=policy_metadata,
-    )
-    server.serve_forever()
-
+        # Execute the actions in the environment.
+        # Add your action execution logic here
+        step_end_time = datetime.now()
+        step_duration = (step_end_time - step_start_time).total_seconds()
+        logging.info(f"Step {step} completed at: {step_end_time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} (Duration: {step_duration:.3f}s)")
+        print(f"Step {step}: Got action chunk with shape {action_chunk.shape}")
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, force=True)
-    main(tyro.cli(Args))
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("Interrupted by user")
+    finally:
+        # Cleanup
+        cv2.destroyAllWindows()
+        print(f"Cleanup completed. Images saved to: {output_dir}")
