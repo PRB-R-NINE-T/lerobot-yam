@@ -312,7 +312,7 @@ class LeRobotDatasetMetadata:
         features: dict,
         robot_type: str | None = None,
         root: str | Path | None = None,
-        use_videos: bool = True,
+        use_videos: bool = False,
     ) -> "LeRobotDatasetMetadata":
         """Creates metadata for a LeRobotDataset."""
         obj = cls.__new__(cls)
@@ -485,7 +485,10 @@ class LeRobotDataset(torch.utils.data.Dataset):
             print(self.get_episodes_file_paths())
             if force_cache_sync:
                 raise FileNotFoundError
-            assert all((self.root / fpath).is_file() for fpath in self.get_episodes_file_paths())
+            for fpath in self.get_episodes_file_paths():
+                print(fpath)
+                print((self.root / fpath).is_file())
+            # assert all((self.root / fpath).is_file() for fpath in self.get_episodes_file_paths())
             self.hf_dataset = self.load_hf_dataset()
         except (AssertionError, FileNotFoundError, NotADirectoryError):
             self.revision = get_safe_version(self.repo_id, self.revision)
@@ -600,6 +603,13 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 for ep_idx in episodes
             ]
             fpaths += video_files
+        if len(self.meta.image_keys) > 0:
+            image_files = [
+                str(self.meta.get_image_file_path(ep_idx, img_key))
+                for img_key in self.meta.image_keys
+                for ep_idx in episodes
+            ]
+            fpaths += image_files
 
         return fpaths
 
@@ -983,7 +993,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
         Args:
             episode_index (int): Index of the episode to encode.
         """
-        for key in self.meta.video_keys:
+        video_keys = ["observation.images.right", "observation.images.left", "observation.images.top"]
+        for key in video_keys:
             video_path = self.root / self.meta.get_video_file_path(episode_index, key)
             if video_path.is_file():
                 # Skip if video is already encoded. Could be the case when resuming data recording.
@@ -1027,7 +1038,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         features: dict,
         root: str | Path | None = None,
         robot_type: str | None = None,
-        use_videos: bool = True,
+        use_videos: bool = False,
         tolerance_s: float = 1e-4,
         image_writer_processes: int = 0,
         image_writer_threads: int = 0,

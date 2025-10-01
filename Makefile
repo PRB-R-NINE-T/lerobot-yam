@@ -235,7 +235,7 @@ record:
 	--robot.cameras="{ top: {type: opencv, index_or_path: 0, width: 640, height: 480, fps: 30}, left :{type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}, right: {type: opencv, index_or_path: 8, width: 640, height: 480, fps: 30}}" \
 	--dataset.reset_time_s=20 --dataset.video_encoding_batch_size=1  --resume=true
 
-record_little:
+record_second:
 	@if ! ip link show can_left | grep -q "state UP"; then \
 		echo "Setting up can_left interface..."; \
 		sudo ip link set can_left up type can bitrate 1000000; \
@@ -249,14 +249,13 @@ record_little:
 		echo "can_right interface is already up"; \
 	fi
 	. .venv/bin/activate && \
-	rm -rf /home/p/.cache/huggingface/lerobot/pierre-safe-sentinels-inc/yam-demo && \
 	LOGLEVEL=INFO PYTHONPATH=/home/p/Desktop/lerobot-yam:$$PYTHONPATH lerobot-record --robot.type=yam_bimanual --robot.port=can_left \
 	--robot.port_right=can_right --robot.id=follower --teleop.type=gello_leader \
 	--teleop.id=leader --teleop.port=/dev/ttyUSB2 --teleop.port_right=/dev/ttyUSB1 \
-	--dataset.repo_id=pierre-safe-sentinels-inc/yam-demo \
-	--dataset.num_episodes=1 --dataset.single_task="fold napkins" --dataset.episode_time_s=150 \
-	--robot.cameras="{ left :{type: opencv, index_or_path: 0, width: 640, height: 480, fps: 30}, right: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
-	--dataset.reset_time_s=20 --dataset.video_encoding_batch_size=1
+	--dataset.repo_id=pierre-safe-sentinels-inc/yam-second-run \
+	--dataset.num_episodes=5 --dataset.single_task="fold napkins" --dataset.episode_time_s=150 \
+	--robot.cameras="{ top: {type: opencv, index_or_path: 0, width: 640, height: 480, fps: 30}, right :{type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}, left: {type: opencv, index_or_path: 8, width: 640, height: 480, fps: 30}}" \
+	--dataset.reset_time_s=20 --dataset.video=False --resume=true
 
 find_cameras:
 	. .venv/bin/activate && \

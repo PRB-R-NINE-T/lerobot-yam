@@ -362,10 +362,10 @@ def get_safe_version(repo_id: str, version: str | packaging.version.Version) -> 
 def get_hf_features_from_features(features: dict) -> datasets.Features:
     hf_features = {}
     for key, ft in features.items():
-        if ft["dtype"] == "video":
+        if ft["dtype"] == "image":
             continue
-        elif ft["dtype"] == "image":
-            hf_features[key] = datasets.Image()
+        elif ft["dtype"] == "video":
+            hf_features[key] = datasets.Video()
         elif ft["shape"] == (1,):
             hf_features[key] = datasets.Value(dtype=ft["dtype"])
         elif len(ft["shape"]) == 1:

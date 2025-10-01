@@ -30,7 +30,7 @@ num_steps = 5000
 # Outside of episode loop, initialize the policy client.
 # Point to the host and port of the policy server (localhost and 8000 are the defaults).
 # 38.80.152.248:30982
-client = websocket_client_policy.WebsocketClientPolicy("38.80.152.248", port=31607)
+client = websocket_client_policy.WebsocketClientPolicy("38.80.152.248", port=32318)
 # Example state and task instruction (you should replace these with actual values)
 state = np.zeros(14)  # Replace with actual robot state
 task_instruction = "fold napkins"  # Replace with actual task instruction
@@ -46,19 +46,19 @@ robot.connect()
 
 cameras = make_cameras_from_configs({
             "top": OpenCVCameraConfig(
-                index_or_path=8,
-                fps=30,
-                width=640,
-                height=480,
-            ),
-            "left": OpenCVCameraConfig(
                 index_or_path=0,
                 fps=30,
                 width=640,
                 height=480,
             ),
-            "right": OpenCVCameraConfig(
+            "left": OpenCVCameraConfig(
                 index_or_path=4,
+                fps=30,
+                width=640,
+                height=480,
+            ),
+            "right": OpenCVCameraConfig(
+                index_or_path=8,
                 fps=30,
                 width=640,
                 height=480,

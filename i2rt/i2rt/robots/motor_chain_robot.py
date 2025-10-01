@@ -439,7 +439,6 @@ class MotorChainRobot(Robot):
         Args:
             joint_pos (np.ndarray): The state to command the leader robot to.
         """
-        print(joint_pos)
         pos = self._clip_robot_joint_pos_command(joint_pos)
         with self._command_lock:
             self._commands = JointCommands.init_all_zero(len(self.motor_chain))
